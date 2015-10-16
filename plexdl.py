@@ -307,6 +307,83 @@ class MovieDownloader(object):
                 ext = os.path.splitext(part['filename'])[1][1:] #override
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,part),extension=getFilesystemSafeName(ext),overwrite=False):
                     print "Video not downloaded"
+            self.metadownload(itemname,plexkey,plextoken,part)
+
+    def metadownload(self,itemname,plexkey,plextoken,part):
+        def metafilepath(self,itemname,filename):
+            if self.structure == "server":
+                 f = os.path.join(self.location, getFilesystemSafeName(part['foldername']), getFilesystemSafeName(os.path.splitext(part['filename'])[0]))
+            else:
+                 f = os.path.join(self.location, getFilesystemSafeName(itemname), filename)
+            return f
+
+        #Get Poster.jpg
+        link = constructPlexUrl(plexkey + "/thumb")
+        retrieveMediaFile(link,metafilepath(self,itemname,"poster"),extension="jpg",overwrite=False)
+        #Get Fanart.jpg
+        link = constructPlexUrl(plexkey + "/art")
+        retrieveMediaFile(link,metafilepath(self,itemname,"fanart"),extension="jpg",overwrite=False)
+
+        #Create nfo file
+        import xml.etree.ElementTree
+        def prettify(elem):
+            rough_string = xml.etree.ElementTree.tostring(elem,'us-ascii')
+            re_parse = xml.dom.minidom.parseString(rough_string)
+            return re_parse.toprettyxml(indent="    ")
+
+        xmldoc = xml.dom.minidom.parse(urllib.urlopen(constructPlexUrl(plexkey)))
+        root = xml.etree.ElementTree.Element('movie')
+        title = xml.etree.ElementTree.SubElement(root,'title')
+        year = xml.etree.ElementTree.SubElement(root,'year')
+        originaltitle = xml.etree.ElementTree.SubElement(root,'originaltitle')
+        contentrating = xml.etree.ElementTree.SubElement(root,'mpaa')
+        summary = xml.etree.ElementTree.SubElement(root,'plot')
+        rating = xml.etree.ElementTree.SubElement(root,'rating')
+        tagline = xml.etree.ElementTree.SubElement(root,'tagline')
+
+        itemlist = xmldoc.getElementsByTagName('Video')
+        for item in itemlist:
+            title.text = geta(item, 'title')
+            year.text = geta(item, 'year')
+            originaltitle.text = geta(item, 'originalTitle')
+            contentrating.text = geta(item, 'contentRating')
+            summary.text =  geta(item, 'summary')
+            rating.text = geta(item, 'rating')
+            tagline.text = geta(item, 'tagline')
+
+        itemlist =xmldoc.getElementsByTagName('Genre')
+        for item in itemlist:
+            genre = xml.etree.ElementTree.SubElement(root,'genre')
+            genre.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Role')
+        for item in itemlist:
+            actor = xml.etree.ElementTree.SubElement(root,'actor')
+            name = xml.etree.ElementTree.SubElement(actor,'name')
+            role = xml.etree.ElementTree.SubElement(actor,'role')
+            name.text = geta(item, 'tag')
+            role.text = geta(item, 'role')
+
+        itemlist =xmldoc.getElementsByTagName('Director')
+        for item in itemlist:
+            director = xml.etree.ElementTree.SubElement(root,'director')
+            director.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Producer')
+        for item in itemlist:
+            producer = xml.etree.ElementTree.SubElement(root,'producer')
+            producer.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Collection')
+        for item in itemlist:
+            collection = xml.etree.ElementTree.SubElement(root,'set')
+            collection.text = geta(item, 'tag')
+
+        print prettify(root)
+        f=open((metafilepath(self,itemname,itemname)+'.nfo'), 'wb')
+        f.write(prettify(root))
+
+
 
 class TvDownloader(object):
     class NoConfig(Exception):
@@ -813,7 +890,7 @@ def getTranscodeVideoURL(plexkey,quality,width,height,bitrate,session,token,part
             "&X-Plex-Client-Identifier="+clientid+
             "&X-Plex-Product=Plex Web"+
             "&X-Plex-Device=Plex Downloader"+
-            "&X-Plex-Platform=HTML TV App"+
+            "&X-Plex-Platform=Plex Home Theater-RaspberryPi"+
             "&X-Plex-Platform-Version=43.0"+
             "&X-Plex-Version=2.4.9"
             )
