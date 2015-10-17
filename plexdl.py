@@ -143,7 +143,7 @@ audio_exts = [ u'aac',u'asf',u'mp4',u'm4a',u'mp1',u'mp2',u'mp3',u'mpg',u'mpeg',u
 plexsession=unicode(uuid.uuid4())  #todo: hardcode this (see https://www.npmjs.com/package/plex-api)
 socket.setdefaulttimeout(180)
 
-debug_limitdld = False      #set to true during development to limit size of downloaded files
+debug_limitdld = True      #set to true during development to limit size of downloaded files
 debug_outputxml = False     #output relevant XML when exceptions occur
 debug_pretenddld = False     #set to true to fake downloading.  connects to Plex but doesn't save the file.
 debug_pretendremove = False    #set to true to fake removing files
@@ -174,6 +174,7 @@ class MovieDownloader(object):
         self.width = parser.get(tc,'width')
         self.bitrate = parser.get(tc,'maxbitrate')
         self.quality = parser.get(tc,'videoquality')
+        self.profile = parser.get(tc,'clientprofile')
 
         self.plexid = parser.get(cfg, 'plexid')
         self.location = parser.get(cfg, 'movielocation')
@@ -182,6 +183,7 @@ class MovieDownloader(object):
         self.active = parser.get(cfg, 'active')
         self.unwatched = parser.get(cfg,'unwatched')
         self.structure = parser.get(cfg,'folderstructure')
+        self.metadata = parser.get(cfg,'metadata')
         #print "MovieDownloader %d - success" % num
         print "Syncing Movies to %s" % (self.location)
 
@@ -298,7 +300,7 @@ class MovieDownloader(object):
                     print "Subtitle file not downloaded"
             elif self.transcodeactive=="enable":
                 print "Downloading transcoded "+ msg
-                link = getTranscodeVideoURL(plexkey,self.quality,self.width, self.height, self.bitrate,plexsession,plextoken,counter)
+                link = getTranscodeVideoURL(plexkey,self.profile,self.quality,self.width, self.height, self.bitrate,plexsession,plextoken,counter)
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,part),overwrite=False):
                     print "Video not transcoded"
             else:
@@ -307,10 +309,11 @@ class MovieDownloader(object):
                 ext = os.path.splitext(part['filename'])[1][1:] #override
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,part),extension=getFilesystemSafeName(ext),overwrite=False):
                     print "Video not downloaded"
-            self.metadownload(itemname,plexkey,plextoken,part)
 
-    def metadownload(self,itemname,plexkey,plextoken,part):
-        def metafilepath(self,itemname,filename):
+        self.metadownload(itemname,plexkey,plextoken,part)  #todo:Cleanup - Moved outside for loop - No Change Move to part validation area so downloads even if video exists
+
+    def metadownload(self,itemname,plexkey,plextoken,part):  #todo: Cleanup - Need to move outside class
+        def metafilepath(self,itemname,filename):  #todo: Cleanup - Need to move outside class and current function
             if self.structure == "server":
                  f = os.path.join(self.location, getFilesystemSafeName(part['foldername']), getFilesystemSafeName(os.path.splitext(part['filename'])[0]))
             else:
@@ -325,8 +328,8 @@ class MovieDownloader(object):
         retrieveMediaFile(link,metafilepath(self,itemname,"fanart"),extension="jpg",overwrite=False)
 
         #Create nfo file
-        import xml.etree.ElementTree
-        def prettify(elem):
+        import xml.etree.ElementTree  #todo:Cleanup - make funtion
+        def prettify(elem):  #todo: Cleanup - move to own function
             rough_string = xml.etree.ElementTree.tostring(elem,'us-ascii')
             re_parse = xml.dom.minidom.parseString(rough_string)
             return re_parse.toprettyxml(indent="    ")
@@ -378,11 +381,8 @@ class MovieDownloader(object):
         for item in itemlist:
             collection = xml.etree.ElementTree.SubElement(root,'set')
             collection.text = geta(item, 'tag')
-
-        print prettify(root)
         f=open((metafilepath(self,itemname,itemname)+'.nfo'), 'wb')
         f.write(prettify(root))
-
 
 
 class TvDownloader(object):
@@ -683,7 +683,7 @@ class TvDownloader(object):
                     print "Subtitle file not downloaded"
             elif self.transcodeactive=="enable":
                 print "Downloading transcoded "+ msg
-                link = getTranscodeVideoURL(plexkey,self.quality,self.width, self.height, self.bitrate,plexsession,plextoken,counter)
+                link = getTranscodeVideoURL(plexkey,self.profile,self.quality,self.width, self.height, self.bitrate,plexsession,plextoken,counter)
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,season,episode,eptitle,part),overwrite=False):
                     print "Video file not transcoded"
             else:
@@ -869,7 +869,7 @@ def ReadItemFile(itemfile):
                 wantedlist.append(l)
     return (wantedlist,skiplist)
 
-def getTranscodeVideoURL(plexkey,quality,width,height,bitrate,session,token,partindex=0):
+def getTranscodeVideoURL(plexkey,clientprofile,quality,width,height,bitrate,session,token,partindex=0):
     clientuid = uuid.uuid4()
     clientid = clientuid.hex[0:16]
     link = (url+"/video/:/transcode/universal/start?path=http%3A%2F%2F127.0.0.1%3A32400"+plexkey+
@@ -890,7 +890,7 @@ def getTranscodeVideoURL(plexkey,quality,width,height,bitrate,session,token,part
             "&X-Plex-Client-Identifier="+clientid+
             "&X-Plex-Product=Plex Web"+
             "&X-Plex-Device=Plex Downloader"+
-            "&X-Plex-Platform=Plex Home Theater-RaspberryPi"+
+            "&X-Plex-Platform="+clientprofile+  # todo: Make variable - testing - Works
             "&X-Plex-Platform-Version=43.0"+
             "&X-Plex-Version=2.4.9"
             )
