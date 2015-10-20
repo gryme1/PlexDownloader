@@ -143,8 +143,8 @@ audio_exts = [ u'aac',u'asf',u'mp4',u'm4a',u'mp1',u'mp2',u'mp3',u'mpg',u'mpeg',u
 plexsession=unicode(uuid.uuid4())  #todo: hardcode this (see https://www.npmjs.com/package/plex-api)
 socket.setdefaulttimeout(180)
 
-debug_limitdld = True      #set to true during development to limit size of downloaded files
-debug_outputxml = False     #output relevant XML when exceptions occur
+debug_limitdld = False      #set to true during development to limit size of downloaded files
+debug_outputxml = True     #output relevant XML when exceptions occur
 debug_pretenddld = False     #set to true to fake downloading.  connects to Plex but doesn't save the file.
 debug_pretendremove = False    #set to true to fake removing files
 debug_plexurl = False        #set to true to output plex URL  (caution - will output Plex token)
@@ -234,6 +234,7 @@ class MovieDownloader(object):
                     parts = getMediaContainerParts(itemkey)
                     if parts:
                         #skip files that already exist
+                        metadownload(self,itemname,itemkey,plextoken)  #todo:Cleanup - Moved outside for loop - No Change Move to part validation area so downloads even if video exists
                         parts [:] = [p for p in parts if not self.exists(itemname,p) ]
                         if parts:
                             self.download(itemname,itemkey,parts)
@@ -310,80 +311,7 @@ class MovieDownloader(object):
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,part),extension=getFilesystemSafeName(ext),overwrite=False):
                     print "Video not downloaded"
 
-        self.metadownload(itemname,plexkey,plextoken,part)  #todo:Cleanup - Moved outside for loop - No Change Move to part validation area so downloads even if video exists
-
-    def metadownload(self,itemname,plexkey,plextoken,part):  #todo: Cleanup - Need to move outside class
-        def metafilepath(self,itemname,filename):  #todo: Cleanup - Need to move outside class and current function
-            if self.structure == "server":
-                 f = os.path.join(self.location, getFilesystemSafeName(part['foldername']), getFilesystemSafeName(os.path.splitext(part['filename'])[0]))
-            else:
-                 f = os.path.join(self.location, getFilesystemSafeName(itemname), filename)
-            return f
-
-        #Get Poster.jpg
-        link = constructPlexUrl(plexkey + "/thumb")
-        retrieveMediaFile(link,metafilepath(self,itemname,"poster"),extension="jpg",overwrite=False)
-        #Get Fanart.jpg
-        link = constructPlexUrl(plexkey + "/art")
-        retrieveMediaFile(link,metafilepath(self,itemname,"fanart"),extension="jpg",overwrite=False)
-
-        #Create nfo file
-        import xml.etree.ElementTree  #todo:Cleanup - make funtion
-        def prettify(elem):  #todo: Cleanup - move to own function
-            rough_string = xml.etree.ElementTree.tostring(elem,'us-ascii')
-            re_parse = xml.dom.minidom.parseString(rough_string)
-            return re_parse.toprettyxml(indent="    ")
-
-        xmldoc = xml.dom.minidom.parse(urllib.urlopen(constructPlexUrl(plexkey)))
-        root = xml.etree.ElementTree.Element('movie')
-        title = xml.etree.ElementTree.SubElement(root,'title')
-        year = xml.etree.ElementTree.SubElement(root,'year')
-        originaltitle = xml.etree.ElementTree.SubElement(root,'originaltitle')
-        contentrating = xml.etree.ElementTree.SubElement(root,'mpaa')
-        summary = xml.etree.ElementTree.SubElement(root,'plot')
-        rating = xml.etree.ElementTree.SubElement(root,'rating')
-        tagline = xml.etree.ElementTree.SubElement(root,'tagline')
-
-        itemlist = xmldoc.getElementsByTagName('Video')
-        for item in itemlist:
-            title.text = geta(item, 'title')
-            year.text = geta(item, 'year')
-            originaltitle.text = geta(item, 'originalTitle')
-            contentrating.text = geta(item, 'contentRating')
-            summary.text =  geta(item, 'summary')
-            rating.text = geta(item, 'rating')
-            tagline.text = geta(item, 'tagline')
-
-        itemlist =xmldoc.getElementsByTagName('Genre')
-        for item in itemlist:
-            genre = xml.etree.ElementTree.SubElement(root,'genre')
-            genre.text = geta(item, 'tag')
-
-        itemlist =xmldoc.getElementsByTagName('Role')
-        for item in itemlist:
-            actor = xml.etree.ElementTree.SubElement(root,'actor')
-            name = xml.etree.ElementTree.SubElement(actor,'name')
-            role = xml.etree.ElementTree.SubElement(actor,'role')
-            name.text = geta(item, 'tag')
-            role.text = geta(item, 'role')
-
-        itemlist =xmldoc.getElementsByTagName('Director')
-        for item in itemlist:
-            director = xml.etree.ElementTree.SubElement(root,'director')
-            director.text = geta(item, 'tag')
-
-        itemlist =xmldoc.getElementsByTagName('Producer')
-        for item in itemlist:
-            producer = xml.etree.ElementTree.SubElement(root,'producer')
-            producer.text = geta(item, 'tag')
-
-        itemlist =xmldoc.getElementsByTagName('Collection')
-        for item in itemlist:
-            collection = xml.etree.ElementTree.SubElement(root,'set')
-            collection.text = geta(item, 'tag')
-        f=open((metafilepath(self,itemname,itemname)+'.nfo'), 'wb')
-        f.write(prettify(root))
-
+        #metadownload(self,itemname,plexkey,plextoken)  #todo:Cleanup - Moved outside for loop - No Change Move to part validation area so downloads even if video exists
 
 class TvDownloader(object):
     class NoConfig(Exception):
@@ -939,6 +867,7 @@ def retrieveMediaFile(link,filename,extension=None,overwrite=False):
                         #chunk = epfile.read(1024)  #1K buffer
                         #fp.write(chunk)
                         break
+                        #return False
                     else:
                         chunk = epfile.read(1024*1024)  #1MB buffer
                         if not chunk: break
@@ -1109,6 +1038,90 @@ def photoSearch():
         else:
             print albumtitle + " Album Not Found in Wanted List."
 
+def metadownload(self,itemname,plexkey,plextoken):  #todo: Cleanup - Need to move outside class - Testing
+    #Get Poster.jpg
+    link = constructPlexUrl(plexkey + "/thumb")
+    if not retrieveMediaFile(link,metafilepath(self,itemname,"poster"),extension="jpg",overwrite=False):
+        print ("Poster not downloaded")
+    #Get Fanart.jpg
+    link = constructPlexUrl(plexkey + "/art")
+    if not retrieveMediaFile(link,metafilepath(self,itemname,"fanart"),extension="jpg",overwrite=False):
+        print ("Fanart not downloaded")
+
+
+    #Create nfo file
+    def nfogenerate(self,itemname,plexkey):
+        import xml.etree.ElementTree  #todo:Cleanup - make funtion - Testing
+
+        def prettify(elem):  #todo: Cleanup - move to own function - Not
+            rough_string = xml.etree.ElementTree.tostring(elem, 'UTF-8')
+            re_parse = xml.dom.minidom.parseString(rough_string)
+            return re_parse.toprettyxml(indent="    ")
+
+        xmldoc = xml.dom.minidom.parse(urllib.urlopen(constructPlexUrl(plexkey)))
+        root = xml.etree.ElementTree.Element('movie')
+        title = xml.etree.ElementTree.SubElement(root,'title')
+        year = xml.etree.ElementTree.SubElement(root,'year')
+        originaltitle = xml.etree.ElementTree.SubElement(root,'originaltitle')
+        contentrating = xml.etree.ElementTree.SubElement(root,'mpaa')
+        summary = xml.etree.ElementTree.SubElement(root,'plot')
+        rating = xml.etree.ElementTree.SubElement(root,'rating')
+        tagline = xml.etree.ElementTree.SubElement(root,'tagline')
+
+        itemlist = xmldoc.getElementsByTagName('Video')
+        for item in itemlist:
+            title.text = geta(item, 'title')
+            year.text = geta(item, 'year')
+            originaltitle.text = geta(item, 'originalTitle')
+            contentrating.text = geta(item, 'contentRating')
+            summary.text =  geta(item, 'summary')
+            rating.text = geta(item, 'rating')
+            tagline.text = geta(item, 'tagline')
+
+        itemlist =xmldoc.getElementsByTagName('Genre')
+        for item in itemlist:
+            genre = xml.etree.ElementTree.SubElement(root,'genre')
+            genre.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Role')
+        for item in itemlist:
+            actor = xml.etree.ElementTree.SubElement(root,'actor')
+            name = xml.etree.ElementTree.SubElement(actor,'name')
+            role = xml.etree.ElementTree.SubElement(actor,'role')
+            name.text = geta(item, 'tag')
+            role.text = geta(item, 'role')
+
+        itemlist =xmldoc.getElementsByTagName('Director')
+        for item in itemlist:
+            director = xml.etree.ElementTree.SubElement(root,'director')
+            director.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Producer')
+        for item in itemlist:
+            producer = xml.etree.ElementTree.SubElement(root,'producer')
+            producer.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Collection')
+        for item in itemlist:
+            collection = xml.etree.ElementTree.SubElement(root,'set')
+            collection.text = geta(item, 'tag')
+        f=open((metafilepath(self,itemname,itemname)+'.nfo'), 'wb')
+        #f.write(prettify(root)) ## Causes problems with non-ascii characters
+        f.write(xml.etree.ElementTree.tostring(root))
+        return True
+
+    #Create nfo file
+    if verbose: print "Generating NFO file"
+    if not nfogenerate(self,itemname,plexkey):
+        print ('NFO file not generated')
+
+
+def metafilepath(self,itemname,filename):  #todo: Cleanup - Need to move outside class and current function
+    if self.structure == "server":
+         f = os.path.join(self.location, getFilesystemSafeName(['foldername']), getFilesystemSafeName(os.path.splitext(['filename'])[0]))
+    else:
+         f = os.path.join(self.location, getFilesystemSafeName(itemname), filename)
+    return f
 
 #Load all sections from config file
 movies = []
