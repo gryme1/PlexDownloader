@@ -17,6 +17,9 @@ The ID you are looking for is the number at the end which in the above example i
 You can also find your content section ID by visiting:
 http://localhost:32400/library/sections/
 
+Transcoder cliet profiles can be found in the Plex server installed folder \Plex\Plex Media Server\Resources\Profiles.
+Use the file name of the appropriate profile. default=HTML TV App
+
 
 [User.Ini Options]
 
@@ -58,6 +61,8 @@ autodelete = enable|disable [Will automatically delete old episodes]
 
 folderstructure = default|server [server uses plex server naming convention - /Season X/Show s1e1 - desc.mkv]
 
+metadata = enable|disable [Will download Poster, Fanart, and NFO file]
+
 [movies]
 
 active = enable|disable (Activates the category so it will be scanned)
@@ -70,6 +75,7 @@ movielocation = /Users/plexdl/Downloads/Movies/ (download location for your sync
 
 fullsync = enable|disable (Will download everything it finds)
 
+metadata = enable|disable [Will download Poster, Fanart nad NFO file]
 
 [music]
 

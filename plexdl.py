@@ -174,6 +174,7 @@ class MovieDownloader(object):
         self.width = parser.get(tc,'width')
         self.bitrate = parser.get(tc,'maxbitrate')
         self.quality = parser.get(tc,'videoquality')
+        self.profile = parser.get(tc,'clientprofile')
 
         self.plexid = parser.get(cfg, 'plexid')
         self.location = parser.get(cfg, 'movielocation')
@@ -182,6 +183,7 @@ class MovieDownloader(object):
         self.active = parser.get(cfg, 'active')
         self.unwatched = parser.get(cfg,'unwatched')
         self.structure = parser.get(cfg,'folderstructure')
+        self.metadata = parser.get(cfg,'metadata')
         #print "MovieDownloader %d - success" % num
         print "Syncing Movies to %s" % (self.location)
 
@@ -232,6 +234,7 @@ class MovieDownloader(object):
                     parts = getMediaContainerParts(itemkey)
                     if parts:
                         #skip files that already exist
+                        metadownload(self,itemname,itemkey,plextoken)
                         parts [:] = [p for p in parts if not self.exists(itemname,p) ]
                         if parts:
                             self.download(itemname,itemkey,parts)
@@ -298,7 +301,7 @@ class MovieDownloader(object):
                     print "Subtitle file not downloaded"
             elif self.transcodeactive=="enable":
                 print "Downloading transcoded "+ msg
-                link = getTranscodeVideoURL(plexkey,self.quality,self.width, self.height, self.bitrate,plexsession,plextoken,counter)
+                link = getTranscodeVideoURL(plexkey,self.profile,self.quality,self.width, self.height, self.bitrate,plexsession,plextoken,counter)
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,part),overwrite=False):
                     print "Video not transcoded"
             else:
@@ -307,6 +310,7 @@ class MovieDownloader(object):
                 ext = os.path.splitext(part['filename'])[1][1:] #override
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,part),extension=getFilesystemSafeName(ext),overwrite=False):
                     print "Video not downloaded"
+
 
 class TvDownloader(object):
     class NoConfig(Exception):
@@ -326,6 +330,7 @@ class TvDownloader(object):
         self.width = parser.get(tc,'width')
         self.bitrate = parser.get(tc,'maxbitrate')
         self.quality = parser.get(tc,'videoquality')
+        self.profile = parser.get(tc,'clientprofile')
 
         self.plexid = parser.get(cfg, 'plexid')
         self.itemfile = parser.get(cfg, 'tvfile')
@@ -606,7 +611,7 @@ class TvDownloader(object):
                     print "Subtitle file not downloaded"
             elif self.transcodeactive=="enable":
                 print "Downloading transcoded "+ msg
-                link = getTranscodeVideoURL(plexkey,self.quality,self.width, self.height, self.bitrate,plexsession,plextoken,counter)
+                link = getTranscodeVideoURL(plexkey,self.profile,self.quality,self.width, self.height, self.bitrate,plexsession,plextoken,counter)
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,season,episode,eptitle,part),overwrite=False):
                     print "Video file not transcoded"
             else:
@@ -792,7 +797,7 @@ def ReadItemFile(itemfile):
                 wantedlist.append(l)
     return (wantedlist,skiplist)
 
-def getTranscodeVideoURL(plexkey,quality,width,height,bitrate,session,token,partindex=0):
+def getTranscodeVideoURL(plexkey,clientprofile,quality,width,height,bitrate,session,token,partindex=0):
     clientuid = uuid.uuid4()
     clientid = clientuid.hex[0:16]
     link = (url+"/video/:/transcode/universal/start?path=http%3A%2F%2F127.0.0.1%3A32400"+plexkey+
@@ -813,7 +818,7 @@ def getTranscodeVideoURL(plexkey,quality,width,height,bitrate,session,token,part
             "&X-Plex-Client-Identifier="+clientid+
             "&X-Plex-Product=Plex Web"+
             "&X-Plex-Device=Plex Downloader"+
-            "&X-Plex-Platform=HTML TV App"+
+            "&X-Plex-Platform="+clientprofile+  # todo: Make variable - testing - Works
             "&X-Plex-Platform-Version=43.0"+
             "&X-Plex-Version=2.4.9"
             )
@@ -1032,6 +1037,90 @@ def photoSearch():
         else:
             print albumtitle + " Album Not Found in Wanted List."
 
+def metadownload(self,itemname,plexkey,plextoken):
+    #Get Poster.jpg
+    link = constructPlexUrl(plexkey + "/thumb")
+    if not retrieveMediaFile(link,metafilepath(self,itemname,"poster"),extension="jpg",overwrite=False):
+        print ("Poster not downloaded")
+    #Get Fanart.jpg
+    link = constructPlexUrl(plexkey + "/art")
+    if not retrieveMediaFile(link,metafilepath(self,itemname,"fanart"),extension="jpg",overwrite=False):
+        print ("Fanart not downloaded")
+
+
+    #Create nfo file
+    def nfogenerate(self,itemname,plexkey):
+        import xml.etree.ElementTree
+
+        def prettify(elem):  #Makes nfo pretty but errors on non-ascii so removed
+            rough_string = xml.etree.ElementTree.tostring(elem, 'UTF-8')
+            re_parse = xml.dom.minidom.parseString(rough_string)
+            return re_parse.toprettyxml(indent="    ")
+
+        xmldoc = xml.dom.minidom.parse(urllib.urlopen(constructPlexUrl(plexkey)))
+        root = xml.etree.ElementTree.Element('movie')
+        title = xml.etree.ElementTree.SubElement(root,'title')
+        year = xml.etree.ElementTree.SubElement(root,'year')
+        originaltitle = xml.etree.ElementTree.SubElement(root,'originaltitle')
+        contentrating = xml.etree.ElementTree.SubElement(root,'mpaa')
+        summary = xml.etree.ElementTree.SubElement(root,'plot')
+        rating = xml.etree.ElementTree.SubElement(root,'rating')
+        tagline = xml.etree.ElementTree.SubElement(root,'tagline')
+
+        itemlist = xmldoc.getElementsByTagName('Video')
+        for item in itemlist:
+            title.text = geta(item, 'title')
+            year.text = geta(item, 'year')
+            originaltitle.text = geta(item, 'originalTitle')
+            contentrating.text = geta(item, 'contentRating')
+            summary.text =  geta(item, 'summary')
+            rating.text = geta(item, 'rating')
+            tagline.text = geta(item, 'tagline')
+
+        itemlist =xmldoc.getElementsByTagName('Genre')
+        for item in itemlist:
+            genre = xml.etree.ElementTree.SubElement(root,'genre')
+            genre.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Role')
+        for item in itemlist:
+            actor = xml.etree.ElementTree.SubElement(root,'actor')
+            name = xml.etree.ElementTree.SubElement(actor,'name')
+            role = xml.etree.ElementTree.SubElement(actor,'role')
+            name.text = geta(item, 'tag')
+            role.text = geta(item, 'role')
+
+        itemlist =xmldoc.getElementsByTagName('Director')
+        for item in itemlist:
+            director = xml.etree.ElementTree.SubElement(root,'director')
+            director.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Producer')
+        for item in itemlist:
+            producer = xml.etree.ElementTree.SubElement(root,'producer')
+            producer.text = geta(item, 'tag')
+
+        itemlist =xmldoc.getElementsByTagName('Collection')
+        for item in itemlist:
+            collection = xml.etree.ElementTree.SubElement(root,'set')
+            collection.text = geta(item, 'tag')
+        f=open((metafilepath(self,itemname,itemname)+'.nfo'), 'wb')
+        #f.write(prettify(root)) ## Causes problems with non-ascii characters
+        f.write(xml.etree.ElementTree.tostring(root))
+        return True
+
+    #Create nfo file
+    if verbose: print "Generating NFO file"
+    if not nfogenerate(self,itemname,plexkey):
+        print ('NFO file not generated')
+
+
+def metafilepath(self,itemname,filename):
+    if self.structure == "server":
+         f = os.path.join(self.location, getFilesystemSafeName(['foldername']), getFilesystemSafeName(os.path.splitext(['filename'])[0]))
+    else:
+         f = os.path.join(self.location, getFilesystemSafeName(itemname), filename)
+    return f
 
 #Load all sections from config file
 movies = []
