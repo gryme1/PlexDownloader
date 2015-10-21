@@ -144,7 +144,7 @@ plexsession=unicode(uuid.uuid4())  #todo: hardcode this (see https://www.npmjs.c
 socket.setdefaulttimeout(180)
 
 debug_limitdld = False      #set to true during development to limit size of downloaded files
-debug_outputxml = True     #output relevant XML when exceptions occur
+debug_outputxml = False     #output relevant XML when exceptions occur
 debug_pretenddld = False     #set to true to fake downloading.  connects to Plex but doesn't save the file.
 debug_pretendremove = False    #set to true to fake removing files
 debug_plexurl = False        #set to true to output plex URL  (caution - will output Plex token)
@@ -234,7 +234,7 @@ class MovieDownloader(object):
                     parts = getMediaContainerParts(itemkey)
                     if parts:
                         #skip files that already exist
-                        metadownload(self,itemname,itemkey,plextoken)  #todo:Cleanup - Moved outside for loop - No Change Move to part validation area so downloads even if video exists
+                        metadownload(self,itemname,itemkey,plextoken)
                         parts [:] = [p for p in parts if not self.exists(itemname,p) ]
                         if parts:
                             self.download(itemname,itemkey,parts)
@@ -311,7 +311,6 @@ class MovieDownloader(object):
                 if not retrieveMediaFile(link, self.fullfilepath(itemname,part),extension=getFilesystemSafeName(ext),overwrite=False):
                     print "Video not downloaded"
 
-        #metadownload(self,itemname,plexkey,plextoken)  #todo:Cleanup - Moved outside for loop - No Change Move to part validation area so downloads even if video exists
 
 class TvDownloader(object):
     class NoConfig(Exception):
@@ -331,6 +330,7 @@ class TvDownloader(object):
         self.width = parser.get(tc,'width')
         self.bitrate = parser.get(tc,'maxbitrate')
         self.quality = parser.get(tc,'videoquality')
+        self.profile = parser.get(tc,'clientprofile')
 
         self.plexid = parser.get(cfg, 'plexid')
         self.itemfile = parser.get(cfg, 'tvfile')
@@ -867,7 +867,6 @@ def retrieveMediaFile(link,filename,extension=None,overwrite=False):
                         #chunk = epfile.read(1024)  #1K buffer
                         #fp.write(chunk)
                         break
-                        #return False
                     else:
                         chunk = epfile.read(1024*1024)  #1MB buffer
                         if not chunk: break
@@ -1038,7 +1037,7 @@ def photoSearch():
         else:
             print albumtitle + " Album Not Found in Wanted List."
 
-def metadownload(self,itemname,plexkey,plextoken):  #todo: Cleanup - Need to move outside class - Testing
+def metadownload(self,itemname,plexkey,plextoken):
     #Get Poster.jpg
     link = constructPlexUrl(plexkey + "/thumb")
     if not retrieveMediaFile(link,metafilepath(self,itemname,"poster"),extension="jpg",overwrite=False):
@@ -1051,9 +1050,9 @@ def metadownload(self,itemname,plexkey,plextoken):  #todo: Cleanup - Need to mov
 
     #Create nfo file
     def nfogenerate(self,itemname,plexkey):
-        import xml.etree.ElementTree  #todo:Cleanup - make funtion - Testing
+        import xml.etree.ElementTree
 
-        def prettify(elem):  #todo: Cleanup - move to own function - Not
+        def prettify(elem):  #Makes nfo pretty but errors on non-ascii so removed
             rough_string = xml.etree.ElementTree.tostring(elem, 'UTF-8')
             re_parse = xml.dom.minidom.parseString(rough_string)
             return re_parse.toprettyxml(indent="    ")
@@ -1116,7 +1115,7 @@ def metadownload(self,itemname,plexkey,plextoken):  #todo: Cleanup - Need to mov
         print ('NFO file not generated')
 
 
-def metafilepath(self,itemname,filename):  #todo: Cleanup - Need to move outside class and current function
+def metafilepath(self,itemname,filename):
     if self.structure == "server":
          f = os.path.join(self.location, getFilesystemSafeName(['foldername']), getFilesystemSafeName(os.path.splitext(['filename'])[0]))
     else:
